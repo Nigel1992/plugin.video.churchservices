@@ -4,7 +4,8 @@
 
 >A lightweight Kodi video add-on that lists live streams from the "What's On Now" page on churchservices.tv and plays direct HLS (m3u8) streams.
 
-[Release 0.1.0](https://github.com/Nigel1992/plugin.video.churchservices/releases/tag/0.1.0) • [Issues](https://github.com/Nigel1992/plugin.video.churchservices/issues)
+• [Get latest release](https://github.com/Nigel1992/plugin.video.churchservices/releases/latest) 
+• [Issues](https://github.com/Nigel1992/plugin.video.churchservices/issues)
 
 ## Features
 
