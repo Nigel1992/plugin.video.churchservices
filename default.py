@@ -51,6 +51,14 @@ def cache_thumb(url):
         return url
 
 
+def kodi_log(msg, level=None):
+    try:
+        if xbmc:
+            xbmc.log('ChurchServices: %s' % msg, level if level is not None else xbmc.LOGDEBUG)
+    except Exception:
+        pass
+
+
 def make_art_uri(url):
     """Resolve a remote thumbnail URL into a Kodi-friendly art URI.
 
@@ -64,19 +72,25 @@ def make_art_uri(url):
     if not re.match(r'^https?://', url):
         url = urllib.parse.urljoin(BASE_URL, url)
 
+    kodi_log('make_art_uri resolving %s' % url)
+
     maybe_local = cache_thumb(url)
 
     if maybe_local and os.path.isfile(maybe_local):
-        if os.name == 'nt':
-            return 'file:///' + maybe_local.replace('\\', '/')
-        return 'file://' + maybe_local
+        uri = 'file:///' + maybe_local.replace('\\', '/') if os.name == 'nt' else 'file://' + maybe_local
+        kodi_log('make_art_uri using cached file %s' % uri)
+        return uri
 
-    # cache_thumb may return a local path or remote URL; prefer remote URL fallback
+    # cache_thumb may return a remote URL or local path; ensure remote fallback works
     if maybe_local and re.match(r'^https?://', maybe_local):
+        kodi_log('make_art_uri using remote url fallback %s' % maybe_local)
         return maybe_local
+
+    kodi_log('make_art_uri raw url fallback %s' % url)
     if re.match(r'^https?://', url):
         return url
 
+    kodi_log('make_art_uri failed to resolve %s' % url)
     return None
 
 
@@ -225,16 +239,13 @@ def list_streams():
                         'poster': art_uri,
                         'banner': art_uri
                     })
-                # some skins read this property for the side artwork
-                try:
-                    li.setProperty('fanart_image', art_uri)
-                except Exception:
-                    pass
-            # debug log for artwork
-            try:
-                xbmc.log('ChurchServices: set listitem art for "%s": %s' % (label, thumb), xbmc.LOGDEBUG)
-            except Exception:
-                pass
+                    try:
+                        li.setProperty('fanart_image', art_uri)
+                    except Exception:
+                        pass
+
+                kodi_log('list_streams: set material %s -> %s' % (label, art_uri))
+
 
         url = make_plugin_url(mode='play', href=href, title=label)
         if xbmcplugin:
@@ -301,14 +312,7 @@ def play_stream(href, title=''):
                     'poster': poster_uri,
                     'banner': poster_uri
                 })
-            try:
-                xbmc.log('ChurchServices: set resolved art for "%s": %s' % (title, art_poster), xbmc.LOGDEBUG)
-            except Exception:
-                pass
-            try:
-                xbmc.log('ChurchServices: set resolved art for "%s": %s' % (title, poster), xbmc.LOGDEBUG)
-            except Exception:
-                pass
+            kodi_log('play_stream: set resolved art for "%s": %s' % (title, poster_uri))
         xbmcplugin.setResolvedUrl(HANDLE, True, li)
 
 def router():
