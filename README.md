@@ -50,7 +50,9 @@ This script uses only the Python standard library (urllib + regex) and prints sc
 
 ## License
 
-- No license specified. If you want this project to be reusable, consider adding a `LICENSE` (for example, MIT).
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+MIT © 2026 Nigel1992
 
 ## Contact & Links
 
