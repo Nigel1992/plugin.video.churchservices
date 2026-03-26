@@ -6,6 +6,7 @@ import urllib.request
 import urllib.parse
 import os
 import hashlib
+import html as html_lib
 
 try:
     import xbmc
@@ -76,10 +77,22 @@ def make_art_uri(url):
 
     maybe_local = cache_thumb(url)
 
-    if maybe_local and os.path.isfile(maybe_local):
-        uri = 'file:///' + maybe_local.replace('\\', '/') if os.name == 'nt' else 'file://' + maybe_local
-        kodi_log('make_art_uri using cached file %s' % uri)
-        return uri
+    # If caching returned a local file path, prefer returning the absolute path
+    # (Kodi handles absolute filesystem paths well on LibreELEC). Use xbmcvfs.exists
+    # when available to ensure Kodi can access the file.
+    try:
+        if maybe_local and os.path.isabs(maybe_local) and os.path.exists(maybe_local):
+            try:
+                import xbmcvfs
+                if xbmcvfs.exists(maybe_local):
+                    kodi_log('make_art_uri using cached file (xbmcvfs) %s' % maybe_local)
+                    return maybe_local
+            except Exception:
+                # fall back to plain filesystem check
+                kodi_log('make_art_uri using cached file %s' % maybe_local)
+                return maybe_local
+    except Exception:
+        pass
 
     # cache_thumb may return a remote URL or local path; ensure remote fallback works
     if maybe_local and re.match(r'^https?://', maybe_local):
@@ -155,6 +168,112 @@ def make_plugin_url(**kwargs):
 def clean_html(text):
     return re.sub(r'<[^>]+>', '', text).strip()
 
+
+def extract_page_poster(page_html):
+    """Find a poster/image URL on a livestream page.
+
+    Tries, in order:
+    - any `poster=` attribute (quoted or unquoted)
+    - common `data-` poster/thumb attributes
+    - inline `background-image: url(...)`
+    - `<meta property="og:image">` and common alternatives
+    - `<link rel="image_src">`
+    - first `<img src=...>`
+
+    Returns an absolute URL or None.
+    """
+    try:
+        if not page_html:
+            return None
+
+        def _norm(u):
+            if not u:
+                return None
+            u = html_lib.unescape(u).strip()
+            if u.startswith('//'):
+                return 'https:' + u
+            if not re.match(r'^https?://', u):
+                return urllib.parse.urljoin(BASE_URL, u)
+            return u
+
+        # 1) poster attribute anywhere
+        m = re.search(r'poster\s*=\s*(?:"([^"]+)"|\'([^\']+)\'|([^>\s]+))', page_html, re.I)
+        if m:
+            url = m.group(1) or m.group(2) or m.group(3)
+            return _norm(url)
+
+        # 2) data-* attributes often used for thumbnails
+        m = re.search(r'\b(?:data-poster|data-thumb|data-thumbnail|data-image|data-src-poster)\s*=\s*(?:"([^"]+)"|\'([^\']+)\'|([^>\s]+))', page_html, re.I)
+        if m:
+            url = m.group(1) or m.group(2) or m.group(3)
+            return _norm(url)
+
+        # 3) background-image: url(...)
+        m = re.search(r'background(?:-image)?\s*:\s*url\((?:"|\')?(?P<u>[^"\')]+)(?:"|\')?\)', page_html, re.I)
+        if m:
+            return _norm(m.group('u'))
+
+        # 4) OpenGraph / Twitter image
+        m = re.search(r'<meta[^>]*(?:property|name)=["\'](?:og:image|twitter:image|twitter:image:src)["\'][^>]*content=["\']([^"\']+)["\']', page_html, re.I)
+        if m:
+            return _norm(m.group(1))
+
+        # 5) link rel=image_src
+        m = re.search(r'<link[^>]*rel=["\']image_src["\'][^>]*href=["\']([^"\']+)["\']', page_html, re.I)
+        if m:
+            return _norm(m.group(1))
+
+        # 6) first img src
+        m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', page_html, re.I)
+        if m:
+            return _norm(m.group(1))
+    except Exception:
+        pass
+    return None
+
+
+def parse_schedule(html):
+    """Parse whats-on-now HTML and return list of dicts with href,time,title,church."""
+    block_pattern = re.compile(
+        r'<div\b[^>]*\bclass=["\'](?=[^"\']*\brow\b)(?=[^"\']*\brow-striped\b)(?=[^"\']*\bclick-schedule\b)[^"\']*["\'][^>]*\bdata-href=["\']([^"\']+)["\'][^>]*>(.*?)(?=<div\b[^>]*\bclass=["\'](?=[^"\']*\brow\b)(?=[^"\']*\brow-striped\b)(?=[^"\']*\bclick-schedule\b)[^"\']*["\']|$)',
+        re.S | re.I
+    )
+
+    blocks = block_pattern.findall(html)
+    results = []
+    if not blocks:
+        return results
+
+    time_re = re.compile(
+        r'<[^>]*\bclass=["\'][^"\']*\bchurch-daily-schedule-time\b[^"\']*["\'][^>]*\bdata-src=["\']([^"\']+)["\']',
+        re.S | re.I
+    )
+
+    title_re = re.compile(
+        r'<div[^>]*\bclass=["\']church-daily-schedule-title(?:\s+schedule-record)?["\'][^>]*>(.*?)</div>',
+        re.S | re.I
+    )
+
+    for href, block in blocks:
+        try:
+            time_m = time_re.search(block)
+            title_divs = title_re.findall(block)
+            if not (time_m and title_divs and len(title_divs) >= 2):
+                time_alt = re.search(r'data-src=["\']([^"\']+)["\']', block)
+                time = clean_html(time_alt.group(1)) if time_alt else ''
+                title = clean_html(title_divs[0]) if title_divs else ''
+                church = clean_html(title_divs[-1]) if title_divs else ''
+            else:
+                time = clean_html(time_m.group(1))
+                title = clean_html(title_divs[0])
+                church = clean_html(title_divs[-1])
+
+            results.append({'href': href, 'time': time, 'title': title, 'church': church})
+        except Exception:
+            continue
+
+    return results
+
 def list_streams():
     try:
         html = get_url(BASE_URL + '/whats-on-now/')
@@ -163,21 +282,13 @@ def list_streams():
             xbmcgui.Dialog().ok('ChurchServices', 'Failed to load whats-on-now: %s' % e)
         return
 
-    pattern = re.compile(
-        r'<div class="row row-striped click-schedule"[^>]*data-href="(?P<href>[^"]+)"[^>]*>.*?'
-        r'<div class="col-sm-2">\s*<div class="church-daily-schedule-time(?: [^\"]*)?"[^>]*data-src="(?P<time>[^"]+)"[^>]*>.*?</div>.*?'
-        r'<div class="col-sm-5">\s*<div class="church-daily-schedule-title schedule-record">(?P<title>.*?)</div>.*?'
-        r'<div class="col-sm-5">\s*<div class="church-daily-schedule-title">(?P<church>.*?)</div>',
-        re.S
-    )
-
-    matches = list(pattern.finditer(html))
-    if not matches:
+    # Parse schedule blocks using helper (falls back like scrape_live)
+    parsed = parse_schedule(html)
+    if not parsed:
         if xbmcgui:
             xbmcgui.Dialog().ok('ChurchServices', 'No current streams found.')
         return
 
-    # hint Kodi that this directory contains movies (helps skins pick artwork/poster view)
     if xbmcplugin:
         try:
             xbmcplugin.setContent(HANDLE, 'movies')
@@ -187,34 +298,22 @@ def list_streams():
             except Exception:
                 pass
 
-    for m in matches:
-        href = m.group('href').strip()
-        time = clean_html(m.group('time'))
-        title = clean_html(m.group('title'))
-        church = clean_html(m.group('church'))
+    for entry in parsed:
+        href = entry.get('href')
+        time = entry.get('time', '')
+        title = entry.get('title', '')
+        church = entry.get('church', '')
         label = f"{time} — {title} — {church}"
 
         # try to extract a thumbnail from the church page: prefer <video poster=>, then og:image, then first img
         thumb = ''
         try:
             page_html = get_url(urllib.parse.urljoin(BASE_URL, href))
-            vposter = re.search(r'<video[^>]*poster=["\']([^"\']+)["\']', page_html)
-            if vposter:
-                thumb = vposter.group(1)
+            poster_url = extract_page_poster(page_html)
+            if poster_url:
+                thumb = poster_url
             else:
-                og = re.search(r'<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']', page_html)
-                if og:
-                    thumb = og.group(1)
-                else:
-                    img = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', page_html)
-                    if img:
-                        thumb = img.group(1)
-            # normalize scheme-less and relative URLs
-            if thumb:
-                if thumb.startswith('//'):
-                    thumb = 'https:' + thumb
-                elif not re.match(r'^https?://', thumb):
-                    thumb = urllib.parse.urljoin(BASE_URL, thumb)
+                thumb = ''
         except Exception:
             thumb = ''
 
@@ -229,7 +328,7 @@ def list_streams():
                     placeholder = os.path.join(translate_path('special://profile/addon_data/plugin.video.churchservices/thumbs'), 'placeholder.png') if xbmc else None
                     ph = make_placeholder(placeholder) if placeholder else None
                     if ph:
-                        art_uri = 'file://' + ph if not ph.startswith('file://') else ph
+                        art_uri = ph
 
                 if art_uri:
                     li.setArt({
@@ -245,7 +344,6 @@ def list_streams():
                         pass
 
                 kodi_log('list_streams: set material %s -> %s' % (label, art_uri))
-
 
         url = make_plugin_url(mode='play', href=href, title=label)
         if xbmcplugin:
@@ -282,13 +380,7 @@ def play_stream(href, title=''):
     # try to get a poster for the player
     poster = None
     try:
-        vp = re.search(r'<video[^>]*poster=["\']([^"\']+)["\']', page_html)
-        if vp:
-            poster = vp.group(1)
-            if poster.startswith('//'):
-                poster = 'https:' + poster
-            elif not re.match(r'^https?://', poster):
-                poster = urllib.parse.urljoin(BASE_URL, poster)
+        poster = extract_page_poster(page_html)
     except Exception:
         poster = None
 
@@ -304,14 +396,14 @@ def play_stream(href, title=''):
                 if ph:
                     poster_uri = 'file://' + ph if not ph.startswith('file://') else ph
 
-            if poster_uri:
-                li.setArt({
-                    'thumb': poster_uri,
-                    'icon': poster_uri,
-                    'fanart': poster_uri,
-                    'poster': poster_uri,
-                    'banner': poster_uri
-                })
+                if poster_uri:
+                    li.setArt({
+                        'thumb': poster_uri,
+                        'icon': poster_uri,
+                        'fanart': poster_uri,
+                        'poster': poster_uri,
+                        'banner': poster_uri
+                    })
             kodi_log('play_stream: set resolved art for "%s": %s' % (title, poster_uri))
         xbmcplugin.setResolvedUrl(HANDLE, True, li)
 
