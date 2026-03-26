@@ -165,9 +165,9 @@ def list_streams():
 
     pattern = re.compile(
         r'<div class="row row-striped click-schedule"[^>]*data-href="(?P<href>[^"]+)"[^>]*>.*?'
-        r'<div class="church-daily-schedule-time[^\"]*"[^>]*data-src="(?P<time>[^"]+)"[^>]*>.*?</div>.*?'
-        r'<div class="church-daily-schedule-title schedule-record">(?P<title>.*?)</div>.*?'
-        r'<div class="church-daily-schedule-title">(?P<church>.*?)</div>',
+        r'<div class="col-sm-2">\s*<div class="church-daily-schedule-time(?: [^\"]*)?"[^>]*data-src="(?P<time>[^"]+)"[^>]*>.*?</div>.*?'
+        r'<div class="col-sm-5">\s*<div class="church-daily-schedule-title schedule-record">(?P<title>.*?)</div>.*?'
+        r'<div class="col-sm-5">\s*<div class="church-daily-schedule-title">(?P<church>.*?)</div>',
         re.S
     )
 
