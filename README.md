@@ -13,7 +13,6 @@
 - Resolves direct HLS (.m3u8) links for playback in Kodi.
 - Fetches thumbnails/posters when available and caches them for smoother UI.
 - Minimal, dependency-free Python code designed to run inside Kodi.
-- Includes `scrape_test.py` — a standalone scraper for quick local testing.
 
 ## Installation
 
