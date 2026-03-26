@@ -25,10 +25,59 @@ USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64)'
 def cache_thumb(url):
     """If running inside Kodi, download remote thumbnail to addon data cache and return local path.
     Otherwise return the original url."""
-    # Always return the remote URL for thumbnails; do not attempt to cache locally.
-    if url and url.startswith('//'):
+    if not xbmc or not url:
+        return url
+    try:
+        # only handle http(s) or protocol-relative URLs
+        if url.startswith('//'):
+            url = 'https:' + url
+        if not url.startswith('http'):
+            return url
+        cache_dir = translate_path('special://profile/addon_data/plugin.video.churchservices/thumbs')
+        cache_dir = os.path.normpath(cache_dir)
+        os.makedirs(cache_dir, exist_ok=True)
+        path = urllib.parse.urlparse(url).path
+        ext = os.path.splitext(path)[1] or '.jpg'
+        name = hashlib.md5(url.encode('utf-8')).hexdigest() + ext
+        local = os.path.join(cache_dir, name)
+        if not os.path.exists(local) or os.path.getsize(local) == 0:
+            req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read()
+            with open(local, 'wb') as fh:
+                fh.write(data)
+        return local
+    except Exception:
+        return url
+
+
+def make_art_uri(url):
+    """Resolve a remote thumbnail URL into a Kodi-friendly art URI.
+
+    Primary approach: cache locally (in kodi addon_data) and use file:// URI for best performance.
+    Fallback: if caching fails, use the remote URL directly.
+    """
+    if not url:
+        return None
+    if url.startswith('//'):
         url = 'https:' + url
-    return url
+    if not re.match(r'^https?://', url):
+        url = urllib.parse.urljoin(BASE_URL, url)
+
+    maybe_local = cache_thumb(url)
+
+    if maybe_local and os.path.isfile(maybe_local):
+        if os.name == 'nt':
+            return 'file:///' + maybe_local.replace('\\', '/')
+        return 'file://' + maybe_local
+
+    # cache_thumb may return a local path or remote URL; prefer remote URL fallback
+    if maybe_local and re.match(r'^https?://', maybe_local):
+        return maybe_local
+    if re.match(r'^https?://', url):
+        return url
+
+    return None
 
 
 def make_placeholder(path):
@@ -160,29 +209,22 @@ def list_streams():
             li.setInfo('video', {'title': label, 'plot': church})
             li.setProperty('IsPlayable', 'true')
             if thumb:
-                art_thumb = cache_thumb(thumb)
-                # if cache_thumb returned a local file, convert to file:// URI for Kodi
-                if art_thumb and os.path.exists(art_thumb):
-                    if os.name == 'nt':
-                        art_uri = 'file:///' + art_thumb.replace('\\', '/')
-                    else:
-                        art_uri = 'file://' + art_thumb
-                else:
-                    # cache failed or returned a remote URL - create placeholder so Kodi doesn't attempt remote fetch
+                art_uri = make_art_uri(thumb)
+                if not art_uri:
+                    # fallback to safe placeholder if image failed to resolve
                     placeholder = os.path.join(translate_path('special://profile/addon_data/plugin.video.churchservices/thumbs'), 'placeholder.png') if xbmc else None
                     ph = make_placeholder(placeholder) if placeholder else None
-                    if ph and os.path.exists(ph):
-                        art_uri = 'file://' + ph
-                    else:
-                        art_uri = art_thumb
+                    if ph:
+                        art_uri = 'file://' + ph if not ph.startswith('file://') else ph
 
-                li.setArt({
-                    'thumb': art_uri,
-                    'icon': art_uri,
-                    'fanart': art_uri,
-                    'poster': art_uri,
-                    'banner': art_uri
-                })
+                if art_uri:
+                    li.setArt({
+                        'thumb': art_uri,
+                        'icon': art_uri,
+                        'fanart': art_uri,
+                        'poster': art_uri,
+                        'banner': art_uri
+                    })
                 # some skins read this property for the side artwork
                 try:
                     li.setProperty('fanart_image', art_uri)
@@ -244,27 +286,21 @@ def play_stream(href, title=''):
         if title:
             li.setInfo('video', {'title': title})
         if poster:
-            art_poster = cache_thumb(poster)
-            if art_poster and os.path.exists(art_poster):
-                if os.name == 'nt':
-                    poster_uri = 'file:///' + art_poster.replace('\\', '/')
-                else:
-                    poster_uri = 'file://' + art_poster
-            else:
+            poster_uri = make_art_uri(poster)
+            if not poster_uri:
                 placeholder = os.path.join(translate_path('special://profile/addon_data/plugin.video.churchservices/thumbs'), 'placeholder.png') if xbmc else None
                 ph = make_placeholder(placeholder) if placeholder else None
-                if ph and os.path.exists(ph):
-                    poster_uri = 'file://' + ph
-                else:
-                    poster_uri = art_poster
+                if ph:
+                    poster_uri = 'file://' + ph if not ph.startswith('file://') else ph
 
-            li.setArt({
-                'thumb': poster_uri,
-                'icon': poster_uri,
-                'fanart': poster_uri,
-                'poster': poster_uri,
-                'banner': poster_uri
-            })
+            if poster_uri:
+                li.setArt({
+                    'thumb': poster_uri,
+                    'icon': poster_uri,
+                    'fanart': poster_uri,
+                    'poster': poster_uri,
+                    'banner': poster_uri
+                })
             try:
                 xbmc.log('ChurchServices: set resolved art for "%s": %s' % (title, art_poster), xbmc.LOGDEBUG)
             except Exception:
