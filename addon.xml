@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addon id="plugin.video.churchservices" version="0.1.0" name="ChurchServices" provider-name="ChurchServices">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0" />
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="default.py">
+        <provides>video</provides>
+    </extension>
+    <icon>icon.png</icon>
+    <summary lang="en">Lists live streams from churchservices.tv</summary>
+    <description lang="en">Scrapes the "What's On Now" page on churchservices.tv and lists current live streams with thumbnails and direct HLS links.</description>
+</addon>
