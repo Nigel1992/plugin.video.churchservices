@@ -25,42 +25,10 @@ USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64)'
 def cache_thumb(url):
     """If running inside Kodi, download remote thumbnail to addon data cache and return local path.
     Otherwise return the original url."""
-    if not xbmc or not url:
-        return url
-    try:
-        # only handle http(s) or protocol-relative URLs
-        if url.startswith('//'):
-            url = 'https:' + url
-        if not url.startswith('http'):
-            return url
-        cache_dir = translate_path('special://profile/addon_data/plugin.video.churchservices/thumbs')
-        cache_dir = os.path.normpath(cache_dir)
-        try:
-            os.makedirs(cache_dir, exist_ok=True)
-        except Exception:
-            # Directory creation failed (likely on LibreELEC), fallback to remote URL
-            return url
-        path = urllib.parse.urlparse(url).path
-        ext = os.path.splitext(path)[1] or '.jpg'
-        name = hashlib.md5(url.encode('utf-8')).hexdigest() + ext
-        local = os.path.join(cache_dir, name)
-        if not os.path.exists(local) or os.path.getsize(local) == 0:
-            try:
-                req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-                with urllib.request.urlopen(req, timeout=15) as resp:
-                    data = resp.read()
-                with open(local, 'wb') as fh:
-                    fh.write(data)
-            except Exception:
-                # Download or write failed, fallback to remote URL
-                return url
-        # Confirm file exists and is readable
-        if os.path.exists(local) and os.path.getsize(local) > 0:
-            return local
-        else:
-            return url
-    except Exception:
-        return url
+    # Always return the remote URL for thumbnails; do not attempt to cache locally.
+    if url and url.startswith('//'):
+        url = 'https:' + url
+    return url
 
 
 def make_placeholder(path):
