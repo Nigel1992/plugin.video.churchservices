@@ -6,7 +6,12 @@
     <extension point="xbmc.python.pluginsource" library="default.py">
         <provides>video</provides>
     </extension>
-    <icon>icon.png</icon>
-    <summary lang="en">Lists live streams from churchservices.tv</summary>
-    <description lang="en">Scrapes the "What's On Now" page on churchservices.tv and lists current live streams with thumbnails and direct HLS links.</description>
+    <extension point="xbmc.addon.metadata">
+        <summary lang="en">Lists live streams from churchservices.tv</summary>
+        <description lang="en">Scrapes the "What's On Now" page on churchservices.tv and lists current live streams with thumbnails and direct HLS links.</description>
+        <assets>
+            <icon>icon.png</icon>
+        </assets>
+        <platform>all</platform>
+    </extension>
 </addon>
