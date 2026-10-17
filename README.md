@@ -1,3 +1,5 @@
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/UbPRh74PzV)
+
 ![ChurchServices](icon.png)
 
 # ChurchServices — Kodi Add-on
@@ -67,4 +69,3 @@ MIT © 2026 Nigel1992
 
 - Website: https://www.churchservices.tv
 - Repository: https://github.com/Nigel1992/plugin.video.churchservices
-
