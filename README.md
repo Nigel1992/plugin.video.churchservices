@@ -5,6 +5,8 @@
 
 # ChurchServices — Kodi Add-on
 
+[![Vibe Coded](https://img.shields.io/badge/Vibe_Coded-✨-8A2BE2?style=for-the-badge)](https://github.com)
+
 >A lightweight Kodi video add-on that lists live streams from the "What's On Now" page on churchservices.tv and plays direct HLS (m3u8) streams.
 
 • [Get latest release](https://github.com/Nigel1992/plugin.video.churchservices/releases/latest) 
